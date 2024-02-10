@@ -5,14 +5,14 @@ from scipy.spatial import distance
 from random import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from keras.utils import np_utils
+from keras.utils import to_categorical
 
 #create a dict with all the points for every label
 def construct_dict():
     dataset_dict = {}
 
     #scans landmarks
-    for dir in os.scandir('LISRecognition/landmarks'):
+    for dir in os.scandir('landmarks'):
         key = dir.name
         dataset_dict[key] = []
         for file in os.scandir(dir.path):
@@ -54,6 +54,7 @@ def create_distance_vector(dataset_dict):
 
     return np.array(distance_vector),np.array(lables)
 
+
 def main():
     dataset_dict = construct_dict()
     distance_vector, lables = create_distance_vector(dataset_dict)
@@ -61,7 +62,7 @@ def main():
     le = LabelEncoder()
     le.fit(lables)
     int_lables = le.transform(lables)
-    int_lables = np_utils.to_categorical(int_lables)
+    int_lables = to_categorical(int_lables)
     X_train, X_test, y_train, y_test = train_test_split(distance_vector, int_lables, test_size=3 / 10, train_size = 7/10, random_state=1127)
     return X_train, X_test, y_train, y_test
 

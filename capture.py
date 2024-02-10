@@ -38,6 +38,6 @@ while True:
                 if(letter!=-1):
                     let = chr(letter)
                     timestamp = str(datetime.now().time()).replace(':','-')
-                    with open('LISRecognition/landmarks/'+let+'/'+timestamp[:timestamp.index('.')]+'.json','w', encoding='utf-8') as f:
+                    with open('landmarks/'+let+'/'+timestamp[:timestamp.index('.')]+'.json','w', encoding='utf-8') as f:
                         f.write(json.dumps(landmarks))
                     

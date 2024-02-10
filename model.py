@@ -7,12 +7,15 @@ from keras.models import Model
 from keras import optimizers
 from keras.losses import SparseCategoricalCrossentropy
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
-from sklearn.metrics import RocCurveDisplay, DetCurveDisplay, confusion_matrix, classification_report
+from sklearn.metrics import RocCurveDisplay, DetCurveDisplay, confusion_matrix, classification_report, auc
 import numpy as np
 import torch 
+import os
 import tensorflow as tf
+from tensorflow import lite
 from matplotlib import pyplot as plt
 import itertools
+
 
 '''
 model = Sequential()
@@ -42,6 +45,32 @@ def create_model():
 
     return model
 
+def load_callbacks():
+    import os
+    from keras.callbacks import EarlyStopping, History, ModelCheckpoint
+
+    history = History()
+    checkpoint_path = "checkpoints/chpk.h5"
+    checkpoint_path_best_only = "bestcheckpoints/chpk.h5"
+
+
+    # Create a callback that saves the model's weights
+    cp_callback = ModelCheckpoint(filepath=checkpoint_path,
+                                  save_weights_only=True,
+                                  save_best_only=False,
+                                  monitor='val_accuracy',
+                                  mode='max',
+                                  verbose=1)
+    cp_callback_best_only = ModelCheckpoint(filepath=checkpoint_path_best_only,
+                                            save_weights_only=True,
+                                            save_best_only=True,
+                                            monitor='val_accuracy',
+                                            mode='max',
+                                            verbose=0)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=100, restore_best_weights=True)
+
+    return [history, cp_callback, cp_callback_best_only, early_stopping]
+
 def main():
     nsplits = 5
     #cv = StratifiedShuffleSplit(n_splits=nsplits, train_size=0.8)
@@ -49,37 +78,22 @@ def main():
     model = create_model()
     X_train, X_test, y_train, y_test = get_dataset()
 
-    model.fit(X_train, y_train, validation_data=(X_test,y_test), epochs=500, batch_size=20, verbose=1)
+    callbacks = load_callbacks()
+
+    model.fit(X_train, y_train, validation_data=(X_test,y_test), epochs=500, batch_size=20, verbose=1, callbacks=callbacks)
     eval = model.evaluate(X_test, y_test)
     scores.append(eval)
     print ('Loss: ' + str(eval[0]) + ' ' + 'Acc: ' + str(eval[1]))
-            
-    prediction = model.predict(X_test)
-    y_true = y_test.argmax(axis=-1)
-    y_pred = prediction.argmax(axis=-1)
 
-    #plot confusion
-    cm = confusion_matrix(y_true, y_pred)
-    cmap=plt.cm.Blues
-    title = "CM"
-    classes = ["a","b","c","d","e","f","h","i","k","l","m","n","o","p","q","r","t","u","v","w","x","y"]
-    plt.figure(figsize=(8,8))
-    plt.imshow(cm, interpolation='nearest', cmap=cmap) 
-    plt.title(title) 
-    plt.colorbar() 
-    tick_marks = np.arange(len(classes)) 
-    plt.xticks(tick_marks, classes, rotation=45) 
-    plt.yticks(tick_marks, classes) 
- 
-    thresh = cm.max() / 2. 
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])): 
-        plt.text(j, i, cm[i, j], 
-                 horizontalalignment="center", 
-                 color="white" if cm[i, j] > thresh else "black") 
- 
-    plt.tight_layout() 
-    plt.ylabel('True label') 
-    plt.xlabel('Predicted label') 
-    plt.show() 
+    model.save('model/mymodel.keras')
+    converter = lite.TFLiteConverter.from_keras_model(model)
+
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.experimental_new_converter=True
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS,
+    tf.lite.OpsSet.SELECT_TF_OPS]
+
+    tfmodel = converter.convert()
+    open('model/exportedmodel.task', 'wb').write(tfmodel)
 
 main()

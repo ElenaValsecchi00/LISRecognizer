@@ -17,17 +17,6 @@ from matplotlib import pyplot as plt
 import itertools
 
 
-'''
-model = Sequential()
-    model.add(Bidirectional(LSTM(units=64, return_sequences=True), input_shape=(22, 20), name='blstm1')) 
-    model.add(Bidirectional(LSTM(32), name='blstm2'))
-    model.add(Dropout(0.5))
-    model.add(Dense(64, activation='relu', name='fc1'))
-    model.add(Dropout(0.5))
-    model.add(Dense(22, activation='softmax', name='fc2'))
-
-'''
-
 def create_model():
     model = Sequential()
     model.add(Bidirectional(LSTM(units=64, return_sequences=True), input_shape=(1, 20), name='blstm1')) 
@@ -35,8 +24,25 @@ def create_model():
     model.add(Dropout(0.5))
     model.add(Dense(64, activation='relu', name='fc1'))
     model.add(Dropout(0.5))
-    model.add(Dense(22, activation='softmax', name='fc2'))
+    model.add(Dense(24, activation='softmax', name='fc2'))
     
+    rmsprop = optimizers.RMSprop(lr=0.001)
+        
+    model.compile(loss="categorical_crossentropy", optimizer=rmsprop, metrics=['accuracy'])
+
+    model.summary()
+
+    return model
+
+def create_moving_model():
+    model = Sequential()
+    model.add(Bidirectional(LSTM(units=64, return_sequences=True), input_shape=(6,20), name='blstm1')) 
+    model.add(Bidirectional(LSTM(32), name='blstm2'))
+    model.add(Dropout(0.5))
+    model.add(Dense(64, activation='relu', name='fc1'))
+    model.add(Dropout(0.5))
+    model.add(Dense(2, activation='softmax', name='fc2'))
+
     rmsprop = optimizers.RMSprop(lr=0.001)
         
     model.compile(loss="categorical_crossentropy", optimizer=rmsprop, metrics=['accuracy'])
@@ -50,8 +56,8 @@ def load_callbacks():
     from keras.callbacks import EarlyStopping, History, ModelCheckpoint
 
     history = History()
-    checkpoint_path = "checkpoints/chpk.h5"
-    checkpoint_path_best_only = "bestcheckpoints/chpk.h5"
+    checkpoint_path = "movingcheckpoints/chpk.h5"
+    checkpoint_path_best_only = "movingbestcheckpoints/chpk.h5"
 
 
     # Create a callback that saves the model's weights
@@ -75,7 +81,7 @@ def main():
     nsplits = 5
     #cv = StratifiedShuffleSplit(n_splits=nsplits, train_size=0.8)
     scores = []
-    model = create_model()
+    model = create_moving_model()
     X_train, X_test, y_train, y_test = get_dataset()
 
     callbacks = load_callbacks()
@@ -85,7 +91,7 @@ def main():
     scores.append(eval)
     print ('Loss: ' + str(eval[0]) + ' ' + 'Acc: ' + str(eval[1]))
 
-    model.save('model/mymodel.keras')
+    model.save('model/mymodelnewmoving.keras')
     converter = lite.TFLiteConverter.from_keras_model(model)
 
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
@@ -94,6 +100,4 @@ def main():
     tf.lite.OpsSet.SELECT_TF_OPS]
 
     tfmodel = converter.convert()
-    open('model/exportedmodel.task', 'wb').write(tfmodel)
-
-main()
+    open('model/newmovingexported.tflite', 'wb').write(tfmodel)

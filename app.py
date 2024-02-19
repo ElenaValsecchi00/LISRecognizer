@@ -2,7 +2,8 @@
 import csv
 import copy
 import argparse
-import itertools
+import imutils
+import os
 from collections import Counter
 from collections import deque
 
@@ -12,6 +13,7 @@ import mediapipe as mp
 
 from cvfpscalc import CvFpsCalc
 from lis_classifier import LISClassifier
+from lis_classifier_moving import LISClassifierMoving
 
 from data_parsing import create_distance_vector
 
@@ -67,6 +69,7 @@ def main():
     )
 
     lis_classifier = LISClassifier()
+    lis_classifier_moving = LISClassifierMoving()
 
     # Read labels ###########################################################
     with open(
@@ -76,27 +79,36 @@ def main():
         lis_classifier_labels = [
             row[0] for row in lis_classifier_labels
         ]
+    with open(
+            'lis_classifier_moving_label.csv',
+            encoding='utf-8-sig') as f:
+        lis_classifier_moving_labels = csv.reader(f)
+        lis_classifier_moving_labels = [
+            row[0] for row in lis_classifier_moving_labels
+        ]
 
     # FPS Measurement ########################################################
     cvFpsCalc = CvFpsCalc(buffer_len=10)
 
     # Coordinate history #################################################################
-    history_length = 16
+    history_length = 6
     point_history = deque(maxlen=history_length)
 
+    # Finger gesture history ################################################
+    finger_gesture_history = deque(maxlen=history_length)
+
     #  ########################################################################
-    mode = 0
 
     while True:
-        fps = cvFpsCalc.get()
 
         # Process Key (ESC: end) #################################################
         key = cv.waitKey(10)
         if key == 27:  # ESC
             break
-
+        
         # Camera capture #####################################################
         ret, image = cap.read()
+        image = imutils.resize(image, width=1190)
         if not ret:
             break
         image = cv.flip(image, 1)  # Mirror display
@@ -115,16 +127,38 @@ def main():
                                                   results.multi_handedness):
                 # Bounding box calculation
                 brect = calc_bounding_rect(debug_image, hand_landmarks)
-                # Landmark calculation
-                landmark_list = calc_landmark_list(debug_image, hand_landmarks)
-                processed_landmark_list = create_distance_vector(landmark_list)
-                # Hand sign classification
-                hand_sign_id = lis_classifier(processed_landmark_list)
-                if hand_sign_id == 2:  # Point gesture
-                    point_history.append(landmark_list[8])
-                else:
-                    point_history.append([0, 0])
 
+                # Landmark calculation
+                landmark_list = calc_landmark_list(hand_landmarks)
+                processed_landmark_list = create_distance_vector(landmark_list,False)
+
+                # Hand sign classification
+                hand_sign_id, percentage = lis_classifier(processed_landmark_list)
+                '''
+                if hand_sign_id==None:
+                    point_history.append(landmark_list)
+                else:
+                    point_history.append([[0.1,0.1,0.1] for i in range (21)])
+                '''
+
+                point_history.append(landmark_list)
+
+                # Finger gesture classification
+                finger_gesture_id = 1
+                percentage_moving = 0
+           
+                sequence = list(point_history)[-7:]
+                if len(sequence) == 6:
+                    point_history_list = create_distance_vector(sequence,True)
+                    finger_gesture_id, percentage_moving = lis_classifier_moving(
+                        point_history_list)
+    
+                # Calculates the gesture IDs in the latest detection
+                finger_gesture_history.append(finger_gesture_id)
+                most_common_fg_id = Counter(
+                    finger_gesture_history).most_common()
+                
+                sign = get_template(hand_sign_id) #get the file with the guessed sign
                 # Drawing part
                 debug_image = draw_bounding_rect(use_brect, debug_image, brect)
                 debug_image = draw_landmarks(debug_image, hand_landmarks)
@@ -133,17 +167,19 @@ def main():
                     brect,
                     handedness,
                     lis_classifier_labels[hand_sign_id],
+                    lis_classifier_moving_labels[finger_gesture_id], 
+                    percentage,
+                    percentage_moving,
+                    sign
                 )
-        else:
-            point_history.append([0, 0])
-        debug_image = draw_info(debug_image, fps, mode, number)
-
+        
         # Screen reflection #############################################################
         cv.imshow('Hand Gesture Recognition', debug_image)
 
     cap.release()
     cv.destroyAllWindows()
 
+#calculate the bounding
 def calc_bounding_rect(image, landmarks):
     image_width, image_height = image.shape[1], image.shape[0]
 
@@ -161,8 +197,8 @@ def calc_bounding_rect(image, landmarks):
 
     return [x, y, x + w, y + h]
 
-
-def calc_landmark_list(image, landmarks):
+#calculate the list
+def calc_landmark_list(landmarks):
 
     landmarks_ls = []
     for id, lm in enumerate(landmarks.landmark):
@@ -186,36 +222,51 @@ def draw_bounding_rect(use_brect, image, brect):
 
     return image
 
+#Function that returns right image for the sign
+def get_template(indx):
+    signs = os.listdir('sign_photos')
+    sign = signs[indx]
+    return "sign_photos/"+sign
 
-def draw_info_text(image, brect, handedness, hand_sign_text):
+ #DIsolay all the info on capture
+def draw_info_text(image, brect, handedness, hand_sign_text, moving_text, percentage, percentage_moving,sign):
     cv.rectangle(image, (brect[0], brect[1]), (brect[2], brect[1] - 22),
                  (0, 0, 0), -1)
-
     info_text = handedness.classification[0].label[0:]
+
+    #Determine if similarity threshold is enough
+    h_text = "None" if percentage < 0.75 else hand_sign_text
+    m_text = "None" if percentage_moving < 0.99 else moving_text
+
+    #If not, remind how letter should be displayed
+    try_text = ""
+    try_m_text = ""
+
+    if h_text == "None":
+        try_text = "Do you mean:" + hand_sign_text +"?"
+    if m_text == "None":
+        try_m_text = "Do you mean:" + moving_text +"?"
+
+    #Set text to display
     if hand_sign_text != "":
-        info_text = info_text + ':' + hand_sign_text
+        info_text = info_text + ':' + h_text
+    if moving_text != "":
+        info_text = info_text + ':' + m_text
+
+
     cv.putText(image, info_text, (brect[0] + 5, brect[1] - 4),
                cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv.LINE_AA)
-
-    return image
-
-def draw_info(image, fps, mode, number):
-    cv.putText(image, "FPS:" + str(fps), (10, 30), cv.FONT_HERSHEY_SIMPLEX,
-               1.0, (0, 0, 0), 4, cv.LINE_AA)
-    cv.putText(image, "FPS:" + str(fps), (10, 30), cv.FONT_HERSHEY_SIMPLEX,
+    cv.putText(image,try_text, (10, 70), cv.FONT_HERSHEY_SIMPLEX,
+               1.0, (0,0,0), 4, cv.LINE_AA)
+    cv.putText(image,try_text, (10, 70), cv.FONT_HERSHEY_SIMPLEX,
                1.0, (255, 255, 255), 2, cv.LINE_AA)
+    
+    #Display image of guessed sign
+    sign = cv.imread(sign)
 
-    mode_string = ['Logging Key Point', 'Logging Point History']
-    if 1 <= mode <= 2:
-        cv.putText(image, "MODE:" + mode_string[mode - 1], (10, 90),
-                   cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1,
-                   cv.LINE_AA)
-        if 0 <= number <= 9:
-            cv.putText(image, "NUM:" + str(number), (10, 110),
-                       cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1,
-                       cv.LINE_AA)
+    if h_text=="None":
+        image[100:100+sign.shape[0], 10:10+sign.shape[1]] = sign
     return image
-
 
 if __name__ == '__main__':
     main()

@@ -3,6 +3,7 @@ import csv
 import copy
 import argparse
 import imutils
+import random
 import os
 from collections import Counter
 from collections import deque
@@ -94,8 +95,11 @@ def main():
     history_length = 6
     point_history = deque(maxlen=history_length)
 
-    # Finger gesture history ################################################
-    finger_gesture_history = deque(maxlen=history_length)
+    #Hand gesture history
+    hand_history_length = 10
+    hand_gesture_history = deque(maxlen=hand_history_length)
+    
+    word = ["None"]
 
     #  ########################################################################
 
@@ -108,7 +112,7 @@ def main():
         
         # Camera capture #####################################################
         ret, image = cap.read()
-        image = imutils.resize(image, width=1190)
+        image = imutils.resize(image, width=1000)
         if not ret:
             break
         image = cv.flip(image, 1)  # Mirror display
@@ -134,35 +138,27 @@ def main():
 
                 # Hand sign classification
                 hand_sign_id, percentage = lis_classifier(processed_landmark_list)
-                '''
-                if hand_sign_id==None:
-                    point_history.append(landmark_list)
-                else:
-                    point_history.append([[0.1,0.1,0.1] for i in range (21)])
-                '''
-
+                
                 point_history.append(landmark_list)
-
+                
                 # Finger gesture classification
                 finger_gesture_id = 1
                 percentage_moving = 0
            
                 sequence = list(point_history)[-7:]
+
                 if len(sequence) == 6:
                     point_history_list = create_distance_vector(sequence,True)
                     finger_gesture_id, percentage_moving = lis_classifier_moving(
                         point_history_list)
+
     
-                # Calculates the gesture IDs in the latest detection
-                finger_gesture_history.append(finger_gesture_id)
-                most_common_fg_id = Counter(
-                    finger_gesture_history).most_common()
-                
                 sign = get_template(hand_sign_id) #get the file with the guessed sign
+
                 # Drawing part
                 debug_image = draw_bounding_rect(use_brect, debug_image, brect)
                 debug_image = draw_landmarks(debug_image, hand_landmarks)
-                debug_image = draw_info_text(
+                debug_image, letter = draw_info_text(
                     debug_image,
                     brect,
                     handedness,
@@ -172,6 +168,17 @@ def main():
                     percentage_moving,
                     sign
                 )
+                
+                #Construction of the word
+                hand_gesture_history.append(letter)
+                h_g = list(hand_gesture_history)
+                if len(h_g) > 0 and h_g.count(h_g[0]) == hand_history_length:
+                    if letter == "si":
+                        word = ["None"]
+                    elif word[-1]!= letter:
+                        word.append(letter)
+
+                debug_image = draw_word(word,debug_image)
         
         # Screen reflection #############################################################
         cv.imshow('Hand Gesture Recognition', debug_image)
@@ -205,7 +212,7 @@ def calc_landmark_list(landmarks):
         landmarks_ls.append([lm.x,lm.y,lm.z])
     return landmarks_ls
 
-
+#draws the hand landmarks
 def draw_landmarks(image, landmark_point):
     mpDraw = mp.solutions.drawing_utils
     mpHands = mp.solutions.hands
@@ -213,7 +220,7 @@ def draw_landmarks(image, landmark_point):
             
     return image
 
-
+#draws the rectangle around the hand
 def draw_bounding_rect(use_brect, image, brect):
     if use_brect:
         # Outer rectangle
@@ -228,7 +235,21 @@ def get_template(indx):
     sign = signs[indx]
     return "sign_photos/"+sign
 
- #DIsolay all the info on capture
+#writes the word the user is spelling
+def draw_word(word,image):
+    w = ""
+    for let in word:
+        if let!="None":
+            w+=let
+
+    cv.putText(image,w, (400, 700), cv.FONT_HERSHEY_SIMPLEX,
+               1.0, (0,0,0), 4, cv.LINE_AA)
+    cv.putText(image,w, (400, 700), cv.FONT_HERSHEY_SIMPLEX,
+               1.0, (255, 255, 255), 2, cv.LINE_AA)
+    return image
+
+
+ #Display all the info on capture
 def draw_info_text(image, brect, handedness, hand_sign_text, moving_text, percentage, percentage_moving,sign):
     cv.rectangle(image, (brect[0], brect[1]), (brect[2], brect[1] - 22),
                  (0, 0, 0), -1)
@@ -236,7 +257,7 @@ def draw_info_text(image, brect, handedness, hand_sign_text, moving_text, percen
 
     #Determine if similarity threshold is enough
     h_text = "None" if percentage < 0.75 else hand_sign_text
-    m_text = "None" if percentage_moving < 0.99 else moving_text
+    m_text = "None" if percentage_moving < 0.95 else moving_text
 
     #If not, remind how letter should be displayed
     try_text = ""
@@ -244,15 +265,20 @@ def draw_info_text(image, brect, handedness, hand_sign_text, moving_text, percen
 
     if h_text == "None":
         try_text = "Do you mean:" + hand_sign_text +"?"
-    if m_text == "None":
+    if m_text == "None" and h_text == "None":
         try_m_text = "Do you mean:" + moving_text +"?"
 
-    #Set text to display
-    if hand_sign_text != "":
-        info_text = info_text + ':' + h_text
-    if moving_text != "":
-        info_text = info_text + ':' + m_text
+    letter = ""
 
+    #Set text to display
+    if h_text != "":
+        if m_text != "" and h_text=="None":# and (hand_sign_text=="g" or hand_sign_text=="i" or hand_sign_text=="None" or hand_sign_text=="o"):
+            info_text = info_text + ':' + m_text
+            letter = m_text
+        else:
+            info_text = info_text + ':' + h_text
+            letter = h_text
+    
 
     cv.putText(image, info_text, (brect[0] + 5, brect[1] - 4),
                cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv.LINE_AA)
@@ -260,13 +286,18 @@ def draw_info_text(image, brect, handedness, hand_sign_text, moving_text, percen
                1.0, (0,0,0), 4, cv.LINE_AA)
     cv.putText(image,try_text, (10, 70), cv.FONT_HERSHEY_SIMPLEX,
                1.0, (255, 255, 255), 2, cv.LINE_AA)
+    cv.putText(image,try_m_text, (10, 110), cv.FONT_HERSHEY_SIMPLEX,
+               1.0, (0,0,0), 4, cv.LINE_AA)
+    cv.putText(image,try_m_text, (10, 110), cv.FONT_HERSHEY_SIMPLEX,
+               1.0, (255, 255, 255), 2, cv.LINE_AA)
+    
     
     #Display image of guessed sign
     sign = cv.imread(sign)
 
     if h_text=="None":
-        image[100:100+sign.shape[0], 10:10+sign.shape[1]] = sign
-    return image
+        image[0:0+sign.shape[0], 300:300+sign.shape[1]] = sign
+    return image,letter
 
 if __name__ == '__main__':
     main()

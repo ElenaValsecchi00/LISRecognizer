@@ -6,6 +6,7 @@ from random import shuffle
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from keras.utils import to_categorical
+from sklearn.metrics import DistanceMetric
 
 #create a dict with all the points for every label
 def construct_dict(path, cut):
@@ -85,13 +86,14 @@ def create_distance_vector(dataset_dict, moving):
                         distance_subvector.append(distances)
                     distance_vector.append(distance_subvector)
             distance_vector = np.array(distance_vector)
-            distance_vector = distance_vector.reshape(len(distance_vector),6,20)
+            distance_vector = distance_vector.reshape(len(distance_vector),1,6*20)
             lables = np.array(lables)
             le = LabelEncoder() #trasform lables into integers
             le.fit(lables)
             int_lables = le.transform(lables)
             int_lables = to_categorical(int_lables)
             return distance_vector,int_lables
+    ##when you submit a single frame or sequence of landmarks
     else:
         if(not moving):
             distances = calculate_distances(dataset_dict)
@@ -113,13 +115,13 @@ def create_distance_vector(dataset_dict, moving):
                     distance_subvector.append(distances)
                 distance_vector.append(distance_subvector)
             distance_vector = np.array(distance_vector)
-            distance_vector = distance_vector.reshape(len(distance_vector),6,20)
+            distance_vector = distance_vector.reshape(len(distance_vector),1,6*20)
             return distance_vector
 
 
 
 def main():
-    dataset_dict = construct_dict('landmarks_moving', 30)
-    distance_vector, int_lables = create_distance_vector(dataset_dict, True)
+    dataset_dict = construct_dict('landmarks', 80)
+    distance_vector, int_lables = create_distance_vector(dataset_dict, False)
     X_train, X_test, y_train, y_test = train_test_split(distance_vector, int_lables, test_size=3 / 10, train_size = 7/10, random_state=1127)
     return X_train, X_test, y_train, y_test

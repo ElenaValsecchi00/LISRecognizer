@@ -7,11 +7,11 @@ import itertools
 #loads the wights of our model
 def load_model(epoch):
     # Load the previously saved weights
-    mymodel = create_moving_model()
+    mymodel = create_model()
     if epoch >= 0:
-        mymodel.load_weights(f'movingcheckpoints/chpk.h5')
+        mymodel.load_weights(f'checkpoints/chpk.h5')
     else:
-        mymodel.load_weights(f'movingbestcheckpoints/chpk.h5')
+        mymodel.load_weights(f'bestcheckpoints/chpk.h5')
 
     return mymodel
 
@@ -70,15 +70,15 @@ def report(model, X_test, y_test, history=None):
     cm = confusion_matrix(y_true, y_pred)
     cmap=plt.cm.Blues
     title = "CM"
-    moving_classes = ["j","z"]
+    moving_classes = ["j","no","si","z"]
     classes = ["a","b","c","d","e","f","g","h","i","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y"]
     plt.figure(figsize=(8,8))
     plt.imshow(cm, interpolation='nearest', cmap=cmap) 
     plt.title(title) 
     plt.colorbar() 
-    tick_marks = np.arange(len(moving_classes)) 
-    plt.xticks(tick_marks, moving_classes, rotation=45) 
-    plt.yticks(tick_marks, moving_classes) 
+    tick_marks = np.arange(len(classes)) 
+    plt.xticks(tick_marks, classes, rotation=45) 
+    plt.yticks(tick_marks, classes) 
  
     thresh = cm.max() / 2. 
     for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])): 

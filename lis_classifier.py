@@ -5,7 +5,7 @@ import tensorflow as tf
 class LISClassifier(object):
     def __init__(
         self,
-        model_path='model/newexported.tflite',
+        model_path='model/alternativeexported.tflite',
         num_threads=1,
     ):
         self.interpreter = tf.lite.Interpreter(model_path=model_path,

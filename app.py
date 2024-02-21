@@ -75,6 +75,7 @@ def main():
     hand_gesture_history = deque(maxlen=hand_history_length)
     
     word = ["None"]
+    last_let = ""
 
     mode = 0
     #  #############
@@ -159,6 +160,9 @@ def main():
                     test_words
                 )
                 
+                if len(word)==0:
+                    word.append("None")
+
                 if mode == 1:
                     #Construction of the word
                     hand_gesture_history.append(letter)
@@ -168,9 +172,13 @@ def main():
                             word = ["None"]
                             if mode == 1:
                                 word_to_spell = choice([i for i in range(0,len(test_words)) if i != word_to_spell])
-
-                        elif word[-1]!= letter:
-                            word.append(letter)
+                            hand_gesture_history.clear()
+                        elif last_let!= letter:
+                            if letter == "no":
+                                word = word[:-2]
+                            else:
+                                word.append(letter)
+                            last_let=letter
 
                     debug_image = draw_word(word,debug_image)
         
